@@ -1,10 +1,13 @@
 package com.mekromn.hdrsnap.capture
 
 import android.accessibilityservice.AccessibilityService
+import android.os.Handler
+import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
 
 class HdrCaptureAccessibilityService : AccessibilityService() {
     private lateinit var monitor: ScreenshotMediaObserver
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -18,15 +21,23 @@ class HdrCaptureAccessibilityService : AccessibilityService() {
     override fun onInterrupt() = Unit
 
     override fun onDestroy() {
+        mainHandler.removeCallbacksAndMessages(null)
         if (::monitor.isInitialized) monitor.stop()
         HdrSnapBridge.disconnect(this)
         super.onDestroy()
     }
 
     fun requestSystemScreenshot(): Boolean {
-        // This deliberately invokes Android's own screenshot action so Android 16's
-        // SurfaceFlinger HDR screenshot/gainmap pipeline remains responsible for capture.
         return performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT)
+    }
+
+    fun requestSystemScreenshotDelayed(delayMs: Long): Boolean {
+        if (delayMs <= 0L) return requestSystemScreenshot()
+        mainHandler.postDelayed(
+            { performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT) },
+            delayMs
+        )
+        return true
     }
 
     fun processLatestScreenshot(): Boolean {

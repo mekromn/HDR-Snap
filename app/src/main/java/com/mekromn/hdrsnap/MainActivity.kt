@@ -168,14 +168,27 @@ class MainActivity : ComponentActivity() {
                             onClick = {
                                 serviceConnected = HdrSnapBridge.isConnected
                                 if (serviceConnected) {
-                                    HdrSnapBridge.requestSystemScreenshot()
+                                    val armed = HdrSnapBridge.requestSystemScreenshotDelayed(1000L)
+                                    if (armed) {
+                                        prefs.lastStatus = "Capture armed — returning to previous app, then capturing in 1 second."
+                                        lastStatus = prefs.lastStatus
+                                        moveTaskToBack(true)
+                                    }
                                 } else {
                                     startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                                 }
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(if (serviceConnected) "Capture HDR screenshot" else "Enable capture service")
+                            Text(if (serviceConnected) "Capture previous app in 1 second" else "Enable capture service")
+                        }
+
+                        if (serviceConnected) {
+                            Text(
+                                "Tip: you can also leave HDR Snap running, open HDR content, and use Power + Volume Down. HDR Snap will inspect the system screenshot afterward.",
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.68f),
+                                fontSize = 13.sp
+                            )
                         }
 
                         if (!photoPermission) {

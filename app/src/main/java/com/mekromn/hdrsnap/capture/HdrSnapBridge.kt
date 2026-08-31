@@ -19,6 +19,10 @@ object HdrSnapBridge {
         return service?.requestSystemScreenshot() == true
     }
 
+    fun requestSystemScreenshotDelayed(delayMs: Long = 900L): Boolean {
+        return service?.requestSystemScreenshotDelayed(delayMs) == true
+    }
+
     fun processLatestScreenshot(): Boolean {
         return service?.processLatestScreenshot() == true
     }
