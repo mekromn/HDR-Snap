@@ -1,70 +1,40 @@
 # HDR Snap
 
-HDR Snap is an Android screenshot utility focused on **true HDR preservation**.
+HDR Snap is an Android screenshot utility focused on **true HDR preservation and automatic gainmapped screenshot replacement**.
 
-## Core rule
+## Provenance rule
 
 HDR Snap never labels an SDR-derived image as a native HDR capture.
 
-Every output records provenance:
-
-- `SYSTEM_HDR_GAINMAP` — genuine Android HDR screenshot with an embedded gainmap produced by the Android screenshot pipeline.
+- `SYSTEM_HDR_GAINMAP` — genuine Android HDR screenshot with an embedded gainmap produced by Android's screenshot pipeline.
 - `SDR_UPCONVERTED` — SDR source to which HDR expansion was intentionally applied by HDR Snap.
 
-SDR upconversion is **off by default**.
+SDR-derived outputs include both EXIF provenance and `SDR-UPCONVERTED` in the filename.
 
-## Android 16 strategy
+## Automatic workflow
 
-Android 16 can store HDR screenshots as PNG files containing:
+After one-time setup, normal Android screenshots require no HDR Snap interaction:
 
-- an 8-bit SDR base rendition,
-- an 8-bit gainmap,
-- ISO 21496-1 gainmap metadata.
+1. Take a screenshot normally (for example Power + Volume Down).
+2. HDR Snap observes the new item in MediaStore.
+3. A short grace period allows the Pixel screenshot preview's Edit action to be used.
+4. If Pixel Studio or legacy Markup opens, processing is suspended for the editing session.
+5. After the final edited media item settles, HDR Snap inspects its gainmap.
+6. Native HDR keeps the Android gainmap; SDR can receive a clearly-labelled synthesized gainmap.
+7. The final JPEG/R is written to the normal `Pictures/Screenshots` folder at quality 100.
+8. HDR Snap reopens that output and requires `Bitmap.hasGainmap() == true`.
+9. Only after that verification may superseded source screenshot files be deleted.
 
-HDR Snap watches the system Screenshots collection and, when a genuine gainmapped screenshot appears, produces a JPEG/R Ultra HDR companion while preserving the decoded gainmap. The original gainmapped PNG remains the archival master.
+If Media Management special access is not granted, HDR Snap keeps the originals rather than prompting or risking data loss.
 
-### Fidelity policy
+## Edited screenshots
 
-For a genuine HDR screenshot HDR Snap must not:
+HDR Snap watches Accessibility `TYPE_WINDOW_STATE_CHANGED` events only to identify screenshot-editing sessions. Known Pixel editors include Pixel Studio (`com.google.android.apps.pixel.creativeassistant`) and legacy Markup (`com.google.android.markup`). If an editor rewrites the source URI, HDR Snap waits for it to settle. If it publishes a new MediaStore row, the new row becomes the source of truth and the older row is treated as superseded, but is still not deleted until the new Ultra HDR replacement passes gainmap verification.
 
-- synthesize a replacement gainmap,
-- tone-map HDR to SDR and then rebuild HDR,
-- alter gainmap ratios/gamma,
-- resize the source or gainmap,
-- discard the original Android HDR PNG.
+## Capture path
 
-JPEG/R companions are encoded at quality 100. The native Android gainmapped PNG is retained as the highest-fidelity archive.
+On Android 16, Android's native screenshot pipeline can generate a PNG containing an SDR base plus an ISO 21496-1 gainmap when HDR content is present. HDR Snap deliberately uses the normal system screenshot path and observes its saved output instead of treating an SDR MediaProjection framebuffer as genuine HDR.
 
-## Capture workflow
+## Development signing
 
-1. Enable HDR Snap's accessibility screenshot service.
-2. Grant photo access so HDR Snap can detect newly-created screenshots.
-3. Use the HDR Snap Quick Settings tile, the in-app Capture button, or the normal Android screenshot shortcut.
-4. Android creates the screenshot through the system screenshot pipeline.
-5. HDR Snap detects the new screenshot, determines whether it contains a gainmap, and creates the requested companion output.
-
-The accessibility service deliberately invokes Android's global screenshot action instead of using MediaProjection as the primary path. This keeps Android 16's native HDR screenshot pipeline in control of HDR capture.
-
-## Output provenance
-
-For generated JPEG outputs HDR Snap writes provenance into EXIF `UserComment` and `ImageDescription`, then re-opens the file and verifies that the gainmap still decodes. A file that fails gainmap verification is rejected rather than silently saved as Ultra HDR.
-
-Example:
-
-```text
-HDRSnapSource=SDR_UPCONVERTED
-HDRSnapNativeHDR=false
-HDRSnapNotice=HDR gainmap synthesized from an SDR screenshot; not a native HDR capture
-```
-
-For genuine HDR:
-
-```text
-HDRSnapSource=SYSTEM_HDR_GAINMAP
-HDRSnapNativeHDR=true
-HDRSnapNotice=Gainmap preserved from Android system HDR screenshot
-```
-
-## Status
-
-Initial Android project and first working capture/conversion implementation are being built in this repository.
+CI debug builds use a repository-visible **development-only** signing key so successive test APKs have a stable signature. It must never be used for a production release.

@@ -18,31 +18,65 @@ class ScreenshotProcessor(private val context: Context) {
     private val resolver = context.contentResolver
     private val prefs = HdrSnapPrefs(context)
 
-    fun process(sourceUri: Uri, sourceName: String) {
-        try {
+    fun process(
+        sourceUri: Uri,
+        sourceName: String,
+        supersededSources: Collection<Uri> = emptyList()
+    ): ProcessResult {
+        return try {
             val bitmap = decode(sourceUri)
             val nativeHdr = bitmap.hasGainmap()
 
-            when {
-                nativeHdr && prefs.convertTrueHdrToJpegR -> {
-                    val output = saveUltraHdr(bitmap, sourceName, Provenance.SYSTEM_HDR_GAINMAP)
-                    prefs.lastStatus = "True HDR preserved → ${output.name}"
-                }
+            val output = when {
+                nativeHdr && prefs.convertTrueHdrToJpegR ->
+                    saveUltraHdr(bitmap, sourceName, Provenance.SYSTEM_HDR_GAINMAP)
+
                 nativeHdr -> {
-                    prefs.lastStatus = "True HDR detected; native gainmapped PNG retained"
+                    val status = "True HDR detected; conversion disabled, source retained"
+                    prefs.lastStatus = status
+                    return ProcessResult(true, false, status)
                 }
+
                 prefs.sdrUpconversionEnabled -> {
                     attachSyntheticGainmap(bitmap)
-                    val output = saveUltraHdr(bitmap, sourceName, Provenance.SDR_UPCONVERTED)
-                    prefs.lastStatus = "SDR explicitly upconverted → ${output.name}"
+                    saveUltraHdr(bitmap, sourceName, Provenance.SDR_UPCONVERTED)
                 }
+
                 else -> {
-                    prefs.lastStatus = "SDR screenshot detected; left unchanged"
+                    val status = "SDR screenshot detected; SDR upconversion disabled, source retained"
+                    prefs.lastStatus = status
+                    return ProcessResult(true, false, status)
                 }
             }
+
+            val deleteSummary = deleteSourcesAfterVerifiedOutput(
+                listOf(sourceUri) + supersededSources,
+                output.uri
+            )
+
+            val prefix = if (nativeHdr) {
+                "True HDR preserved"
+            } else {
+                "SDR upconverted with provenance"
+            }
+
+            val status = when (deleteSummary) {
+                DeleteSummary.NOT_REQUESTED -> "$prefix → ${output.name}; original retained by setting"
+                DeleteSummary.DELETED -> "$prefix → ${output.name}; original removed"
+                DeleteSummary.NEEDS_ACCESS -> "$prefix → ${output.name}; original retained — grant Media management access for automatic replacement"
+                DeleteSummary.PARTIAL -> "$prefix → ${output.name}; replacement verified, but one or more source files could not be removed"
+            }
+            prefs.lastStatus = status
+            ProcessResult(true, true, status)
         } catch (t: Throwable) {
-            prefs.lastStatus = "Processing failed: ${t.javaClass.simpleName}: ${t.message ?: "unknown error"}"
+            val status = "Processing failed; original kept: ${t.javaClass.simpleName}: ${t.message ?: "unknown error"}"
+            prefs.lastStatus = status
+            ProcessResult(false, false, status)
         }
+    }
+
+    fun canDeleteWithoutPrompt(): Boolean {
+        return Build.VERSION.SDK_INT >= 31 && MediaStore.canManageMedia(context)
     }
 
     private fun decode(uri: Uri): Bitmap {
@@ -65,7 +99,10 @@ class ScreenshotProcessor(private val context: Context) {
         val values = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, displayName)
             put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-            put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/Screenshots/HDR Snap")
+            put(
+                MediaStore.Images.Media.RELATIVE_PATH,
+                "${Environment.DIRECTORY_PICTURES}/Screenshots"
+            )
             put(MediaStore.Images.Media.IS_PENDING, 1)
         }
 
@@ -83,7 +120,8 @@ class ScreenshotProcessor(private val context: Context) {
 
             writeProvenanceExif(outputUri, provenance)
 
-            // EXIF mutation must never silently destroy the secondary gainmap image.
+            // This is the transaction barrier. No source file may be deleted until the
+            // final image reopens successfully and still exposes an embedded gainmap.
             val verified = decode(outputUri)
             check(verified.hasGainmap()) {
                 "Post-encode verification failed: JPEG no longer contains a gainmap"
@@ -102,14 +140,37 @@ class ScreenshotProcessor(private val context: Context) {
         }
     }
 
+    private fun deleteSourcesAfterVerifiedOutput(
+        sources: Collection<Uri>,
+        verifiedOutput: Uri
+    ): DeleteSummary {
+        if (!prefs.deleteOriginalAfterVerify) return DeleteSummary.NOT_REQUESTED
+        if (!canDeleteWithoutPrompt()) return DeleteSummary.NEEDS_ACCESS
+
+        var failed = false
+        sources.distinct().forEach { uri ->
+            if (uri == verifiedOutput) return@forEach
+            try {
+                resolver.delete(uri, null, null)
+            } catch (_: SecurityException) {
+                failed = true
+            } catch (_: Throwable) {
+                failed = true
+            }
+        }
+        return if (failed) DeleteSummary.PARTIAL else DeleteSummary.DELETED
+    }
+
     private fun writeProvenanceExif(uri: Uri, provenance: Provenance) {
-        val description = provenance.description
         resolver.openFileDescriptor(uri, "rw").use { pfd ->
             requireNotNull(pfd) { "Unable to open JPEG for EXIF metadata" }
             val exif = ExifInterface(pfd.fileDescriptor)
-            exif.setAttribute(ExifInterface.TAG_IMAGE_DESCRIPTION, description)
+            exif.setAttribute(ExifInterface.TAG_IMAGE_DESCRIPTION, provenance.description)
             exif.setAttribute(ExifInterface.TAG_USER_COMMENT, provenance.userComment)
-            exif.setAttribute(ExifInterface.TAG_SOFTWARE, "HDR Snap ${com.mekromn.hdrsnap.BuildConfig.VERSION_NAME}")
+            exif.setAttribute(
+                ExifInterface.TAG_SOFTWARE,
+                "HDR Snap ${com.mekromn.hdrsnap.BuildConfig.VERSION_NAME}"
+            )
             exif.saveAttributes()
         }
     }
@@ -151,6 +212,14 @@ class ScreenshotProcessor(private val context: Context) {
     }
 
     data class SavedOutput(val uri: Uri, val name: String)
+    data class ProcessResult(val success: Boolean, val producedReplacement: Boolean, val status: String)
+
+    private enum class DeleteSummary {
+        NOT_REQUESTED,
+        DELETED,
+        NEEDS_ACCESS,
+        PARTIAL
+    }
 
     enum class Provenance(val description: String, val userComment: String) {
         SYSTEM_HDR_GAINMAP(

@@ -16,7 +16,14 @@ class HdrCaptureAccessibilityService : AccessibilityService() {
         monitor.start()
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && ::monitor.isInitialized) {
+            monitor.onWindowStateChanged(
+                event.packageName?.toString(),
+                event.className?.toString()
+            )
+        }
+    }
 
     override fun onInterrupt() = Unit
 
@@ -32,11 +39,7 @@ class HdrCaptureAccessibilityService : AccessibilityService() {
     }
 
     fun requestSystemScreenshotDelayed(delayMs: Long): Boolean {
-        if (delayMs <= 0L) return requestSystemScreenshot()
-        mainHandler.postDelayed(
-            { performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT) },
-            delayMs
-        )
+        mainHandler.postDelayed({ performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT) }, delayMs)
         return true
     }
 

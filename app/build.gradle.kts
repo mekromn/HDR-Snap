@@ -13,8 +13,18 @@ android {
         applicationId = "com.mekromn.hdrsnap"
         minSdk = 34
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
+    }
+
+    val stableDevKeystore = rootProject.file("ci/hdrsnap-debug.keystore")
+    if (stableDevKeystore.exists()) {
+        signingConfigs.getByName("debug") {
+            storeFile = stableDevKeystore
+            storePassword = "hdrsnapdev"
+            keyAlias = "hdrsnapdebug"
+            keyPassword = "hdrsnapdev"
+        }
     }
 
     buildFeatures {
@@ -39,7 +49,6 @@ kotlin {
 }
 
 dependencies {
-    // Compose 1.11 is the last stable line compiled against API 36.
     val composeBom = platform("androidx.compose:compose-bom:2026.04.01")
     implementation(composeBom)
 
