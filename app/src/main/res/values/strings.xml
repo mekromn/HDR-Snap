@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">HDR Snap</string>
+    <string name="accessibility_description">Lets HDR Snap request the Android system screenshot action and watch new screenshots for embedded HDR gainmaps.</string>
+</resources>
