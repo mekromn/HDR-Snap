@@ -3,6 +3,7 @@ package com.mekromn.hdrsnap
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -51,6 +52,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent { HdrSnapApp() }
+    }
+
+    private fun openHdrSnapAppInfo() {
+        startActivity(
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.parse("package:$packageName")
+            }
+        )
     }
 
     @Composable
@@ -106,6 +115,48 @@ class MainActivity : ComponentActivity() {
                             good = serviceConnected,
                             detail = "Uses Android's system screenshot action rather than MediaProjection."
                         )
+
+                        if (!serviceConnected) {
+                            Card(
+                                shape = RoundedCornerShape(24.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF282036)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    Modifier.padding(18.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Text("Sideloaded APK setup", fontWeight = FontWeight.Bold)
+                                    Text(
+                                        "If Accessibility says ‘Controlled by Restricted Setting’, Android is blocking the sideloaded accessibility service until you explicitly approve it.",
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f),
+                                        fontSize = 13.sp
+                                    )
+                                    Text(
+                                        "1. Open HDR Snap app info.\n2. Tap ⋮ in the upper-right.\n3. Tap Allow restricted settings and authenticate.\n4. Return here and open Accessibility.\n5. Enable HDR Snap capture service.",
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f),
+                                        fontSize = 13.sp
+                                    )
+                                    Button(
+                                        onClick = { openHdrSnapAppInfo() },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text("1. Open HDR Snap app info")
+                                    }
+                                    Button(
+                                        onClick = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text("2. Open Accessibility")
+                                    }
+                                    Text(
+                                        "HDR Snap cannot grant this permission to itself; Android requires a user-authorized restricted-settings approval.",
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f),
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
+                        }
 
                         StatusCard(
                             title = if (photoPermission) "Screenshot access granted" else "Photo access required",
