@@ -111,16 +111,26 @@ class MainActivity : ComponentActivity() {
 
         val colors = darkColorScheme(
             primary = Color(0xFF8AB4F8),
+            onPrimary = Color(0xFF102044),
             secondary = Color(0xFF72E6D1),
+            onSecondary = Color(0xFF05201B),
             surface = Color(0xFF11151D),
-            background = Color(0xFF05070B)
+            onSurface = Color(0xFFF2F4FA),
+            onSurfaceVariant = Color(0xFFC5CAD4),
+            background = Color(0xFF05070B),
+            onBackground = Color(0xFFF5F7FC),
+            error = Color(0xFFFFB4AB),
+            onError = Color(0xFF690005)
         )
 
         MaterialTheme(colorScheme = colors) {
             val background = Brush.verticalGradient(
                 listOf(Color(0xFF071426), Color(0xFF05070B), Color(0xFF120B16))
             )
-            Scaffold(containerColor = Color.Transparent) { insets ->
+            Scaffold(
+                containerColor = Color.Transparent,
+                contentColor = MaterialTheme.colorScheme.onBackground
+            ) { insets ->
                 Box(Modifier.fillMaxSize().background(background).padding(insets)) {
                     Column(
                         modifier = Modifier
@@ -130,7 +140,12 @@ class MainActivity : ComponentActivity() {
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         Spacer(Modifier.height(8.dp))
-                        Text("HDR Snap", fontSize = 38.sp, fontWeight = FontWeight.Black)
+                        Text(
+                            "HDR Snap",
+                            fontSize = 38.sp,
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
                         Text(
                             "Automatic gainmapped screenshots. True HDR is preserved; SDR-derived HDR is explicitly labeled.",
                             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.72f)
@@ -159,7 +174,10 @@ class MainActivity : ComponentActivity() {
                         if (!serviceConnected) {
                             Card(
                                 shape = RoundedCornerShape(24.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFF282036)),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = Color(0xFF282036),
+                                    contentColor = MaterialTheme.colorScheme.onSurface
+                                ),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Column(
@@ -295,7 +313,8 @@ class MainActivity : ComponentActivity() {
                         Card(
                             shape = RoundedCornerShape(24.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f)
+                                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
+                                contentColor = MaterialTheme.colorScheme.onSurface
                             ),
                             modifier = Modifier.fillMaxWidth().animateContentSize()
                         ) {
@@ -342,7 +361,8 @@ class MainActivity : ComponentActivity() {
         Card(
             shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(
-                containerColor = if (good) Color(0xFF10251F) else Color(0xFF28171B)
+                containerColor = if (good) Color(0xFF10251F) else Color(0xFF28171B),
+                contentColor = MaterialTheme.colorScheme.onSurface
             ),
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -367,7 +387,8 @@ class MainActivity : ComponentActivity() {
         Card(
             shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f)
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
+                contentColor = MaterialTheme.colorScheme.onSurface
             ),
             modifier = Modifier.fillMaxWidth()
         ) {
