@@ -27,44 +27,44 @@ class ScreenshotProcessor(private val context: Context) {
             val bitmap = decode(sourceUri)
             val nativeHdr = bitmap.hasGainmap()
 
-            val output = when {
-                nativeHdr && prefs.convertTrueHdrToJpegR ->
-                    saveUltraHdr(bitmap, sourceName, Provenance.SYSTEM_HDR_GAINMAP)
-
-                nativeHdr -> {
-                    val status = "True HDR detected; conversion disabled, source retained"
+            // Android 16 native HDR screenshots are already gainmapped PNG masters.
+            // Never replace or delete them: PNG base + PNG gainmap is the highest-fidelity
+            // representation available from the system screenshot pipeline. JPEG/R is only
+            // an optional compatibility companion.
+            if (nativeHdr) {
+                if (prefs.convertTrueHdrToJpegR) {
+                    val output = saveUltraHdr(bitmap, sourceName, Provenance.SYSTEM_HDR_GAINMAP)
+                    val status = "Native HDR PNG retained; optional JPEG/R companion → ${output.name}"
                     prefs.lastStatus = status
-                    return ProcessResult(true, false, status)
+                    return ProcessResult(true, true, status)
                 }
 
-                prefs.sdrUpconversionEnabled -> {
-                    attachSyntheticGainmap(bitmap)
-                    saveUltraHdr(bitmap, sourceName, Provenance.SDR_UPCONVERTED)
-                }
-
-                else -> {
-                    val status = "SDR screenshot detected; SDR upconversion disabled, source retained"
-                    prefs.lastStatus = status
-                    return ProcessResult(true, false, status)
-                }
+                val status = "Native HDR gainmapped PNG detected and retained unchanged"
+                prefs.lastStatus = status
+                return ProcessResult(true, false, status)
             }
 
+            if (!prefs.sdrUpconversionEnabled) {
+                val status = "SDR screenshot detected; SDR upconversion disabled, source retained"
+                prefs.lastStatus = status
+                return ProcessResult(true, false, status)
+            }
+
+            attachSyntheticGainmap(bitmap)
+            val output = saveUltraHdr(bitmap, sourceName, Provenance.SDR_UPCONVERTED)
+
+            // Automatic source deletion applies only to SDR screenshots that HDR Snap itself
+            // converted. Genuine native HDR PNG screenshots are never routed through here.
             val deleteSummary = deleteSourcesAfterVerifiedOutput(
                 listOf(sourceUri) + supersededSources,
                 output.uri
             )
 
-            val prefix = if (nativeHdr) {
-                "True HDR preserved"
-            } else {
-                "SDR upconverted with provenance"
-            }
-
             val status = when (deleteSummary) {
-                DeleteSummary.NOT_REQUESTED -> "$prefix → ${output.name}; original retained by setting"
-                DeleteSummary.DELETED -> "$prefix → ${output.name}; original removed"
-                DeleteSummary.NEEDS_ACCESS -> "$prefix → ${output.name}; original retained — grant Media management access for automatic replacement"
-                DeleteSummary.PARTIAL -> "$prefix → ${output.name}; replacement verified, but one or more source files could not be removed"
+                DeleteSummary.NOT_REQUESTED -> "SDR upconverted with provenance → ${output.name}; original retained by setting"
+                DeleteSummary.DELETED -> "SDR upconverted with provenance → ${output.name}; original removed"
+                DeleteSummary.NEEDS_ACCESS -> "SDR upconverted with provenance → ${output.name}; original retained — grant Media management access for automatic replacement"
+                DeleteSummary.PARTIAL -> "SDR upconverted with provenance → ${output.name}; replacement verified, but one or more source files could not be removed"
             }
             prefs.lastStatus = status
             ProcessResult(true, true, status)
@@ -120,8 +120,6 @@ class ScreenshotProcessor(private val context: Context) {
 
             writeProvenanceExif(outputUri, provenance)
 
-            // This is the transaction barrier. No source file may be deleted until the
-            // final image reopens successfully and still exposes an embedded gainmap.
             val verified = decode(outputUri)
             check(verified.hasGainmap()) {
                 "Post-encode verification failed: JPEG no longer contains a gainmap"
@@ -224,7 +222,7 @@ class ScreenshotProcessor(private val context: Context) {
     enum class Provenance(val description: String, val userComment: String) {
         SYSTEM_HDR_GAINMAP(
             description = "HDR Snap: native Android HDR screenshot gainmap preserved",
-            userComment = "HDRSnapSource=SYSTEM_HDR_GAINMAP; HDRSnapNativeHDR=true; HDRSnapNotice=Gainmap preserved from Android system HDR screenshot"
+            userComment = "HDRSnapSource=SYSTEM_HDR_GAINMAP; HDRSnapNativeHDR=true; HDRSnapNotice=Native gainmapped PNG retained; JPEG/R is a compatibility companion"
         ),
         SDR_UPCONVERTED(
             description = "HDR Snap: SDR screenshot upconverted to HDR; NOT native HDR",
